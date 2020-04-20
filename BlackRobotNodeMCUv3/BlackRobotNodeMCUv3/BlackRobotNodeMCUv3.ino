@@ -44,7 +44,7 @@ void handleRoot(String msg) {
        motoresIzquierda(255);
     else if (comando.equals("DE")) 
        motoresDerecha(255);
-    else if (comando.equals("S0") || comando.equals("S1")) // Servo camara cabeza
+    else if (comando.substring(0,1).equals("X")) // Servo camara cabeza
        camaraWeb(msg);
     else if (comando.equals("CL")){
        if (accion.equals("1")) 
@@ -177,7 +177,8 @@ void claxonOFF() {
 }
 
 void camaraWeb(String msg) {
-  int pos = msg.substring(1,2).toInt();
-  pos = (pos*180)/19;
+  int pos = msg.substring(1,3).toInt();
+  pos = (pos*180)/99;
   myservo.write(pos);
+  Serial.println(pos);
 }
