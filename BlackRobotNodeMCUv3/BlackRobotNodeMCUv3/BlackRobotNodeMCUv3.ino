@@ -1,5 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
+#include <Servo.h>
 
 #ifndef STASSID
 #define STASSID "MIWIFI_2G_6ATg"
@@ -23,6 +24,7 @@ unsigned int localPort = 3030;      // local port to listen on
 bool sw = true;
 String comando, accion;
 WiFiUDP Udp;
+Servo myservo;  // create servo object to control a servo
 
 void handleRoot(String msg) {  
     comando = msg.substring(0,2);
@@ -42,6 +44,8 @@ void handleRoot(String msg) {
        motoresIzquierda(255);
     else if (comando.equals("DE")) 
        motoresDerecha(255);
+    else if (comando.equals("S0") || comando.equals("S1")) // Servo camara cabeza
+       camaraWeb(msg);
     else if (comando.equals("CL")){
        if (accion.equals("1")) 
          claxonON(); 
@@ -65,13 +69,16 @@ void setup(void) {
   pinMode(IN4, OUTPUT);
   pinMode(LUZ, OUTPUT);
   pinMode(CLAXON, OUTPUT);
-  
+ 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);  
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, LOW);
   digitalWrite(LUZ, LOW);
   digitalWrite(CLAXON, LOW);
+  
+  myservo.attach(D4);  // attaches the servo on GIO2 to the servo object
+  myservo.write(87);
   
   Serial.begin(9600);
   WiFi.mode(WIFI_STA);
@@ -167,4 +174,10 @@ void claxonON() {
 
 void claxonOFF() {
   digitalWrite(CLAXON,LOW);
+}
+
+void camaraWeb(String msg) {
+  int pos = msg.substring(1,2).toInt();
+  pos = (pos*180)/19;
+  myservo.write(pos);
 }
