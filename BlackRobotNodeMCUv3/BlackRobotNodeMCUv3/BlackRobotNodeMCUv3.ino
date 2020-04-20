@@ -1,7 +1,5 @@
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
 
 #ifndef STASSID
 #define STASSID "MIWIFI_2G_6ATg"
@@ -18,22 +16,19 @@
 #define CLAXON D1
 #define NUMCOMANDOS 7;
 
-const char* ssid = STASSID;
-const char* password = STAPSK;
-
-ESP8266WebServer server(80);
-
+// buffers for receiving and sending data
+char packetBuffer[UDP_TX_PACKET_MAX_SIZE + 1]; //buffer to hold incoming packet,
+char  ReplyBuffer[] = "acknowledged\r\n";       // a string to send back
+unsigned int localPort = 3030;      // local port to listen on
 bool sw = true;
 String comando, accion;
+WiFiUDP Udp;
 
-void handleRoot() {  
-  if (server.args()!=2) {
-     server.send(200, "text/plain", "Argumentos no válidos: Uso {AT|AV|IZ|DE|LU|CL}{0|1}");
-  } else {
-    comando =server.arg(0);
-    accion = server.arg(1);  
+void handleRoot(String msg) {  
+    comando = msg.substring(0,2);
     comando.toUpperCase(); 
-     
+    accion = msg.substring(2); // 0 apagar 1 encender 
+   
     Serial.println(comando);
     Serial.println(accion);
 
@@ -46,34 +41,20 @@ void handleRoot() {
     else if (comando.equals("IZ")) 
        motoresIzquierda(255);
     else if (comando.equals("DE")) 
-         motoresDerecha(255);
-    else if (comando.equals("CL")) 
-       claxon(); // NO IMPLEMENTADO EL CLAXON EN ROBOT AZUL
+       motoresDerecha(255);
+    else if (comando.equals("CL")){
+       if (accion.equals("1")) 
+         claxonON(); 
+       else  
+         claxonOFF();  
+    }      
     else if (comando.equals("LU")) {
        if (accion.equals("1")) 
          luzON(); 
        else  
          luzOFF();  
     }     
-    server.send(200, "text/plain", "Comando:"+comando + " Accion:"+accion);
-  }
-}
-
-void handleNotFound() {
-  digitalWrite(LED_BUILTIN, HIGH);
-  String message = "File Not Found\n\n";
-  message += "URI: ";
-  message += server.uri();
-  message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server.args();
-  message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
-  }
-  server.send(404, "text/plain", message);
-  digitalWrite(LED_BUILTIN, LOW);
+    Serial.println("Comando:"+comando + " Accion:"+accion);
 }
 
 void setup(void) {
@@ -94,40 +75,35 @@ void setup(void) {
   
   Serial.begin(9600);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.println("");
-
-  // Wait for connection
+  WiFi.begin(STASSID, STAPSK);
   while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
     delay(500);
-    Serial.print(".");
   }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
+  Serial.print("Connected! IP address: ");
   Serial.println(WiFi.localIP());
-
-  if (MDNS.begin("esp8266")) {
-    Serial.println("MDNS responder started");
-  }
-
-  server.on("/", handleRoot);
-
-  server.on("/inline", []() {
-    server.send(200, "text/plain", "this works as well");
-  });
-
-  server.onNotFound(handleNotFound);
-  server.begin();
-  Serial.println("HTTP server started");
+  Serial.printf("UDP server on port %d\n", localPort);
+  Udp.begin(localPort);
 }
 
 void loop(void) {
-  server.handleClient();
-  MDNS.update();
-}
+   // if there's data available, read a packet
+  int packetSize = Udp.parsePacket();
+  if (packetSize) {
+    Serial.printf("Received packet of size %d from %s:%d\n    (to %s:%d, free heap = %d B)\n",
+                  packetSize,
+                  Udp.remoteIP().toString().c_str(), Udp.remotePort(),
+                  Udp.destinationIP().toString().c_str(), Udp.localPort(),
+                  ESP.getFreeHeap());
 
+    // read the packet into packetBufffer
+    int n = Udp.read(packetBuffer, UDP_TX_PACKET_MAX_SIZE);
+    packetBuffer[n] = 0;
+    Serial.println("Contents:");
+    Serial.println(packetBuffer);
+    handleRoot(packetBuffer);
+  }
+}
 
 void motoresAdelante(int motorSpeed) { 
   //analogWrite(ENA, motorSpeed);
@@ -183,8 +159,12 @@ void luzOFF() {
   digitalWrite(LUZ, LOW);
 }
 
-void claxon() {
+void claxonON() {
   digitalWrite(CLAXON, HIGH);
   delay(50);
+  digitalWrite(CLAXON,LOW);
+}
+
+void claxonOFF() {
   digitalWrite(CLAXON,LOW);
 }
